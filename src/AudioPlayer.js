@@ -25,55 +25,61 @@ const rowColors = [
 ];
 
 const AudioPlayer = () => {
-    const [audioContext, setAudioContext] = useState(null);
-    const [tracks, setTracks] = useState([]);
-    const [isPlaying, setIsPlaying] = useState(false);
-    const [isLooping, setIsLooping] = useState(false);
-    const [cursorPosition, setCursorPosition] = useState(0);
-    const totalDurationRef = useRef(18); // Assuming a fixed total duration for simplicity
-    const playingRef = useRef(false);
-    const containerRef = useRef(null); // For calculating cursor position within the container
-    const startTimeRef = useRef(null); // Missing ref definition added here
-    const animationRef = useRef(null); // To manage requestAnimationFrame for cursor updates
-
+  const [audioContext, setAudioContext] = useState(null);
+  const [tracks, setTracks] = useState([]);
+  const [isLooping, setIsLooping] = useState(false);
+  const [cursorPosition, setCursorPosition] = useState(0);
+  const [isDragging, setIsDragging] = useState(false);
+  const playingRef = useRef(false);
+  const animationRef = useRef(null);
+  const startTimeRef = useRef(null);
+  const totalDurationRef = useRef(18); // Assuming a fixed duration for simplicity
 
   useEffect(() => {
-    const ac = new AudioContext();
-    setAudioContext(ac);
-    loadAudioFiles(ac);
+    const context = new AudioContext();
+    setAudioContext(context);
+    loadAudioFiles(context, audioFiles);
 
-    return () => ac.close();
+    return () => {
+      context.close();
+      if (animationRef.current) {
+        cancelAnimationFrame(animationRef.current);
+      }
+    };
   }, []);
 
-  const loadAudioFiles = async (ac) => {
-    const buffers = await Promise.all(audioFiles.map(async (file) => {
-      const response = await fetch(file);
-      const arrayBuffer = await response.arrayBuffer();
-      return await ac.decodeAudioData(arrayBuffer);
-    }));
+  const loadAudioFiles = async (context, files) => {
+    const audioBuffers = await Promise.all(
+      files.map(async (file) => {
+        const response = await fetch(file);
+        const arrayBuffer = await response.arrayBuffer();
+        return await context.decodeAudioData(arrayBuffer);
+      })
+    );
 
-    setTracks(buffers.map((buffer, index) => ({
+    setTracks(audioBuffers.map((buffer, index) => ({
       id: index,
       audioBuffer: buffer,
       isMuted: false,
-      gainNode: ac.createGain(),
+      gainNode: context.createGain(),
     })));
   };
 
   const playAllAudio = () => {
     if (!playingRef.current && audioContext) {
       playingRef.current = true;
-      setIsPlaying(true);
       tracks.forEach(track => {
-        const source = audioContext.createBufferSource();
-        source.buffer = track.audioBuffer;
-        source.loop = isLooping;
-        source.connect(track.gainNode);
+        // Setup and play tracks...
+        track.source = audioContext.createBufferSource();
+        track.source.buffer = track.audioBuffer;
+        track.source.loop = isLooping;
+        track.source.connect(track.gainNode);
         track.gainNode.connect(audioContext.destination);
-        track.gainNode.gain.value = track.isMuted ? 0 : 1;
-        source.start(0, cursorPosition / 100 * totalDurationRef.current);
-        track.source = source;
+        track.source.start();
       });
+
+      startTimeRef.current = audioContext.currentTime;
+      setCursorPosition(0); // Reset cursor position at start
       requestAnimationFrame(updateCursorPosition);
     }
   };
@@ -83,19 +89,27 @@ const AudioPlayer = () => {
       tracks.forEach(track => {
         if (track.source) {
           track.source.stop();
-          delete track.source;
+          delete track.source; // Clean up the source
         }
       });
       playingRef.current = false;
-      setIsPlaying(false);
+      cancelAnimationFrame(animationRef.current);
+      setCursorPosition(0); // Reset cursor position
     }
   };
 
-  const toggleLoop = () => setIsLooping(!isLooping);
+  const toggleLoop = () => {
+    setIsLooping(!isLooping);
+    tracks.forEach(track => {
+      if (track.source) {
+        track.source.loop = !isLooping;
+      }
+    });
+  };
 
-  const toggleMute = (id) => {
+  const toggleMute = (trackId) => {
     setTracks(tracks.map(track => {
-      if (track.id === id) {
+      if (track.id === trackId) {
         track.isMuted = !track.isMuted;
         track.gainNode.gain.value = track.isMuted ? 0 : 1;
       }
@@ -105,63 +119,36 @@ const AudioPlayer = () => {
 
   const updateCursorPosition = () => {
     if (!playingRef.current || !audioContext) return;
-    const elapsedTime = audioContext.currentTime % totalDurationRef.current;
-    const position = (elapsedTime / totalDurationRef.current) * 100;
+
+    const elapsedTime = audioContext.currentTime - startTimeRef.current;
+    let position = (elapsedTime / totalDurationRef.current) * 100;
+
+    if (!isLooping && elapsedTime >= totalDurationRef.current) {
+      playingRef.current = false; // Stop playing
+      cancelAnimationFrame(animationRef.current); // Stop cursor update
+      position = 100; // Set cursor to the end
+    } else if (isLooping) {
+      position = position % 100; // Keep the cursor within 0-100% range
+    }
+
     setCursorPosition(position);
-    requestAnimationFrame(updateCursorPosition);
-  };
-
-  // Drag-and-drop functionality
-  const handleMouseDown = (e) => {
-    document.addEventListener('mousemove', handleMouseMove);
-    document.addEventListener('mouseup', handleMouseUp);
-  };
-
-  const handleMouseMove = (e) => {
-    const bounds = containerRef.current.getBoundingClientRect();
-    const position = ((e.clientX - bounds.left) / bounds.width) * 100;
-    setCursorPosition(Math.max(0, Math.min(100, position))); // Clamp position between 0 and 100
-  };
-
-  const handleMouseUp = () => {
-    document.removeEventListener('mousemove', handleMouseMove);
-    document.removeEventListener('mouseup', handleMouseUp);
-    // Calculate and set the new playback position
-    const newTime = (cursorPosition / 100) * totalDurationRef.current;
-    if (isPlaying) {
-      playAllAudioFromTime(newTime);
+    if (playingRef.current) {
+      animationRef.current = requestAnimationFrame(updateCursorPosition);
     }
   };
 
-  const playAllAudioFromTime = (startTime) => {
-    stopAllAudio(); // First, stop all currently playing tracks
-    playingRef.current = true;
-    setIsPlaying(true);
-    tracks.forEach(track => {
-      const source = audioContext.createBufferSource();
-      source.buffer = track.audioBuffer;
-      source.loop = isLooping;
-      source.connect(track.gainNode);
-      track.gainNode.connect(audioContext.destination);
-      track.gainNode.gain.value = track.isMuted ? 0 : 1;
-      source.start(0, startTime % source.buffer.duration);
-      track.source = source;
-    });
-    startTimeRef.current = audioContext.currentTime - startTime;
-    requestAnimationFrame(updateCursorPosition);
-  };
-
   return (
-    <div ref={containerRef} style={{ position: 'relative', height: '100%' }} onMouseDown={handleMouseDown}>
-      <button onClick={playAllAudio}>{isPlaying ? "⏸ Pause" : "▶️ Play All"}</button>
+    <div style={{ position: 'relative', height: '100%' }}>
+      <button onClick={playAllAudio}>▶️ Play All</button>
       <button onClick={stopAllAudio}>⏹️ Stop All</button>
-      <button onClick={toggleLoop}>{isLooping ? "🔄 Loop ON" : "🔄 Loop OFF"}</button>
+      <button onClick={toggleLoop}>{isLooping ? "🔄 Loop: ON" : "🔄 Loop: OFF"}</button>
       {tracks.map((track, index) => (
         <div key={index} style={{ backgroundColor: rowColors[index], padding: '10px', marginBlock: '5px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', position: 'relative' }}>
-          <span style={{ color: '#282c34' }}>{audioFiles[index].split('/').pop().replace('.mp3', '')}</span>
+        <span style={{ color: '#282c34' }}>Track {index + 1}</span>
           <button onClick={() => toggleMute(track.id)}>
-            {track.isMuted ? "🔇 Mute" : "🔊 Unmute"}
+            {track.isMuted ? "🔇" : "🔊"}
           </button>
+          {/* Individual cursor for each track */}
           <div className="cursor" style={{ left: `${cursorPosition}%`, width: '2px', height: '100%', position: 'absolute', backgroundColor: 'red' }}></div>
         </div>
       ))}

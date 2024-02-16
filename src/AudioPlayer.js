@@ -33,7 +33,7 @@ const AudioPlayer = () => {
   const [isLooping, setIsLooping] = useState(false);
   const [cursorPosition, setCursorPosition] = useState(0);
   const [isDragging, setIsDragging] = useState(false);
-
+  
   // Refs for managing playback and animation
   const playingRef = useRef(false);
   const animationRef = useRef(null);

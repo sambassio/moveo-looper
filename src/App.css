@@ -36,3 +36,13 @@
     transform: rotate(360deg);
   }
 }
+
+.cursor {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 1px;
+  background-color: black; /* or any color that stands out */
+  transition: transform 0.1s linear; /* Smooth transition for cursor movement */
+}
+

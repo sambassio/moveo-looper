@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 
+// Array of audio file paths
 const audioFiles = [
   "/audio/all.mp3",
   "/audio/b_voc.mp3",
@@ -12,6 +13,7 @@ const audioFiles = [
   "/audio/uuho_voc.mp3",
 ];
 
+// Colors for each row
 const rowColors = [
   "#FFADAD",
   "#FFD6A5",
@@ -25,16 +27,20 @@ const rowColors = [
 ];
 
 const AudioPlayer = () => {
+  // State variables
   const [audioContext, setAudioContext] = useState(null);
   const [tracks, setTracks] = useState([]);
   const [isLooping, setIsLooping] = useState(false);
   const [cursorPosition, setCursorPosition] = useState(0);
   const [isDragging, setIsDragging] = useState(false);
+  
+  // Refs for managing playback and animation
   const playingRef = useRef(false);
   const animationRef = useRef(null);
   const startTimeRef = useRef(null);
   const totalDurationRef = useRef(18); // Assuming a fixed duration for simplicity
 
+  // Load audio files and initialize AudioContext on component mount
   useEffect(() => {
     const context = new AudioContext();
     setAudioContext(context);
@@ -48,6 +54,7 @@ const AudioPlayer = () => {
     };
   }, []);
 
+  // Function to load audio files
   const loadAudioFiles = async (context, files) => {
     const audioBuffers = await Promise.all(
       files.map(async (file) => {
@@ -57,6 +64,7 @@ const AudioPlayer = () => {
       })
     );
 
+    // Set tracks with audio buffers and gain nodes
     setTracks(audioBuffers.map((buffer, index) => ({
       id: index,
       audioBuffer: buffer,
@@ -65,6 +73,7 @@ const AudioPlayer = () => {
     })));
   };
 
+  // Function to start playback of all tracks
   const playAllAudio = () => {
     if (!playingRef.current && audioContext) {
       playingRef.current = true;
@@ -84,6 +93,7 @@ const AudioPlayer = () => {
     }
   };
 
+  // Function to stop playback of all tracks
   const stopAllAudio = () => {
     if (playingRef.current) {
       tracks.forEach(track => {
@@ -98,6 +108,7 @@ const AudioPlayer = () => {
     }
   };
 
+  // Function to toggle looping of all tracks
   const toggleLoop = () => {
     setIsLooping(!isLooping);
     tracks.forEach(track => {
@@ -107,6 +118,7 @@ const AudioPlayer = () => {
     });
   };
 
+  // Function to toggle mute for a specific track
   const toggleMute = (trackId) => {
     setTracks(tracks.map(track => {
       if (track.id === trackId) {
@@ -117,6 +129,7 @@ const AudioPlayer = () => {
     }));
   };
 
+  // Function to update cursor position based on playback time
   const updateCursorPosition = () => {
     if (!playingRef.current || !audioContext) return;
 
@@ -139,12 +152,15 @@ const AudioPlayer = () => {
 
   return (
     <div style={{ position: 'relative', height: '100%' }}>
+      {/* Buttons for playback control */}
       <button onClick={playAllAudio}>▶️ Play All</button>
       <button onClick={stopAllAudio}>⏹️ Stop All</button>
       <button onClick={toggleLoop}>{isLooping ? "🔄 Loop: ON" : "🔄 Loop: OFF"}</button>
+
+      {/* Track rows with mute buttons and individual cursors */}
       {tracks.map((track, index) => (
         <div key={index} style={{ backgroundColor: rowColors[index], padding: '10px', marginBlock: '5px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', position: 'relative' }}>
-        <span style={{ color: '#282c34' }}>Track {index + 1}</span>
+          <span style={{ color: '#282c34' }}>Track {index + 1}</span>
           <button onClick={() => toggleMute(track.id)}>
             {track.isMuted ? "🔇" : "🔊"}
           </button>
